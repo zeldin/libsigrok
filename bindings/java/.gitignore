@@ -1,0 +1,8 @@
+!/Makefile
+*.jar
+*.so
+/javac_out/
+/jni/swig_out/
+/libs/
+/obj/
+/swig_out/

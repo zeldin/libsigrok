@@ -37,6 +37,7 @@ struct _GSList
 };
 
 void g_slist_free(GSList *list);
+GSList *g_slist_prepend(GSList *list, gpointer data);
 
 GVariant *g_variant_new_uint64(uint64_t value);
 GVariant *g_variant_new_boolean(gboolean value);
@@ -47,7 +48,7 @@ char *g_variant_get_type_string(GVariant *value);
 uint64_t g_variant_get_uint64(GVariant *value);
 gboolean g_variant_get_boolean(GVariant *value);
 double g_variant_get_double(GVariant *value);
-char *g_variant_get_string(GVariant *value, unsigned long *length);
+char *g_variant_get_string(GVariant *value, gsize *length);
 GVariant *g_variant_get_child_value(GVariant *value, unsigned long index);
 
 typedef guint (*GHashFunc)(gconstpointer key);
@@ -89,6 +90,7 @@ gchar *g_string_free(GString *string, gboolean free_segment);
 %pointer_functions(uint8_t *, uint8_ptr_ptr);
 %pointer_functions(uint64_t, uint64_ptr);
 %pointer_functions(GString *, gstring_ptr_ptr);
+%pointer_functions(GSList *, gslist_ptr_ptr);
 %pointer_functions(GVariant *, gvariant_ptr_ptr);
 %array_functions(GVariant *, gvariant_ptr_array);
 %pointer_functions(struct sr_context *, sr_context_ptr_ptr);
