@@ -31,8 +31,8 @@
 #include "libsigrok-internal.h"
 #include "protocol.h"
 
-#define FPGA_FIRMWARE_18	FIRMWARE_DIR"/saleae-logic16-fpga-18.bitstream"
-#define FPGA_FIRMWARE_33	FIRMWARE_DIR"/saleae-logic16-fpga-33.bitstream"
+#define FPGA_FIRMWARE_18	"saleae-logic16-fpga-18.bitstream"
+#define FPGA_FIRMWARE_33	"saleae-logic16-fpga-33.bitstream"
 
 #define MAX_SAMPLE_RATE		SR_MHZ(100)
 #define MAX_4CH_SAMPLE_RATE	SR_MHZ(50)
@@ -469,7 +469,7 @@ static int upload_fpga_bitstream(const struct sr_dev_inst *sdi,
 	int offset, chunksize, ret;
 	const char *filename;
 	uint8_t len, buf[256 * 62], command[64];
-	FILE *fw;
+	struct sr_firmware_inst fw;
 
 	devc = sdi->priv;
 
@@ -489,21 +489,19 @@ static int upload_fpga_bitstream(const struct sr_dev_inst *sdi,
 			return SR_ERR;
 		}
 
-		sr_info("Uploading FPGA bitstream at %s.", filename);
-		if (!(fw = g_fopen(filename, "rb"))) {
-			sr_err("Unable to open bitstream file %s for reading: %s.",
-			       filename, g_strerror(errno));
+		if (firmware_open(&fw, filename) != SR_OK) {
 			return SR_ERR;
 		}
+		sr_info("Uploading FPGA bitstream at %s.", fw.filename);
 
 		buf[0] = COMMAND_FPGA_UPLOAD_INIT;
 		if ((ret = do_ep1_command(sdi, buf, 1, NULL, 0)) != SR_OK) {
-			fclose(fw);
+			firmware_close(&fw);
 			return ret;
 		}
 
 		while (1) {
-			chunksize = fread(buf, 1, sizeof(buf), fw);
+			chunksize = firmware_read(&fw, buf, sizeof(buf));
 			if (chunksize == 0)
 				break;
 
@@ -515,14 +513,14 @@ static int upload_fpga_bitstream(const struct sr_dev_inst *sdi,
 				memcpy(command + 2, buf + offset, len);
 				ret = do_ep1_command(sdi, command, len + 2, NULL, 0);
 				if (ret != SR_OK) {
-					fclose(fw);
+					firmware_close(&fw);
 					return ret;
 				}
 			}
 
 			sr_info("Uploaded %d bytes.", chunksize);
 		}
-		fclose(fw);
+		firmware_close(&fw);
 		sr_info("FPGA bitstream upload done.");
 	}
 

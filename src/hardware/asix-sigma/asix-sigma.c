@@ -92,15 +92,15 @@ static const int32_t trigger_matches[] = {
 
 static const char *sigma_firmware_files[] = {
 	/* 50 MHz, supports 8 bit fractions */
-	FIRMWARE_DIR "/asix-sigma-50.fw",
+	"asix-sigma-50.fw",
 	/* 100 MHz */
-	FIRMWARE_DIR "/asix-sigma-100.fw",
+	"asix-sigma-100.fw",
 	/* 200 MHz */
-	FIRMWARE_DIR "/asix-sigma-200.fw",
+	"asix-sigma-200.fw",
 	/* Synchronous clock from pin */
-	FIRMWARE_DIR "/asix-sigma-50sync.fw",
+	"asix-sigma-50sync.fw",
 	/* Frequency counter */
-	FIRMWARE_DIR "/asix-sigma-phasor.fw",
+	"asix-sigma-phasor.fw",
 };
 
 static int sigma_read(void *buf, size_t size, struct dev_context *devc)
@@ -511,8 +511,7 @@ err:
 static int sigma_fw_2_bitbang(const char *filename,
 			      uint8_t **bb_cmd, gsize *bb_cmd_size)
 {
-	GMappedFile *file;
-	GError *error;
+	struct sr_firmware_inst fw;
 	gsize i, file_size, bb_size;
 	gchar *firmware;
 	uint8_t *bb_stream, *bbs;
@@ -520,19 +519,25 @@ static int sigma_fw_2_bitbang(const char *filename,
 	int bit, v;
 	int ret = SR_OK;
 
-	/*
-	 * Map the file and make the mapped buffer writable.
-	 * NOTE: Using writable=TRUE does _NOT_ mean that file that is mapped
-	 *       will be modified. It will not be modified until someone uses
-	 *       g_file_set_contents() on it.
-	 */
-	error = NULL;
-	file = g_mapped_file_new(filename, TRUE, &error);
-	g_assert_no_error(error);
+	if (firmware_open(&fw, filename) != SR_OK) {
+		return SR_ERR;
+	}
 
-	file_size = g_mapped_file_get_length(file);
-	firmware = g_mapped_file_get_contents(file);
-	g_assert(firmware);
+	file_size = fw.size;
+	firmware = g_try_malloc(file_size);
+	if (!firmware) {
+		sr_err("%s: Failed to allocate firmware buffer", __func__);
+		ret = SR_ERR_MALLOC;
+		firmware_close(&fw);
+		goto exit;
+	}
+	if (firmware_read(&fw, firmware, file_size) != file_size) {
+		sr_err("Failed to read bitstream file");
+		ret = SR_ERR;
+		firmware_close(&fw);
+		goto exit;
+	}
+	firmware_close(&fw);
 
 	/* Weird magic transformation below, I have no idea what it does. */
 	imm = 0x3f6df2ab;
@@ -571,7 +576,7 @@ static int sigma_fw_2_bitbang(const char *filename,
 	*bb_cmd_size = bb_size;
 
 exit:
-	g_mapped_file_unref(file);
+	g_free(firmware);
 	return ret;
 }
 

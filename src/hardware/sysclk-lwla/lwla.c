@@ -34,54 +34,41 @@
  */
 static unsigned char *load_bitstream_file(const char *filename, int *length_p)
 {
-	struct stat statbuf;
-	FILE *file;
+	struct sr_firmware_inst fw;
 	unsigned char *stream;
 	size_t length, count;
 
-	/* Retrieve and validate the file size. */
-	if (stat(filename, &statbuf) < 0) {
-		sr_err("Failed to access bitstream file: %s.",
-		       g_strerror(errno));
+	if (firmware_open(&fw, filename) != SR_OK) {
 		return NULL;
 	}
-	if (!S_ISREG(statbuf.st_mode)) {
-		sr_err("Bitstream is not a regular file.");
-		return NULL;
-	}
-	if (statbuf.st_size <= 0 || statbuf.st_size > BITSTREAM_MAX_SIZE) {
+
+	if (fw.size <= 0 || fw.size > BITSTREAM_MAX_SIZE) {
 		sr_err("Refusing to load bitstream of unreasonable size "
-		       "(%" PRIu64 " bytes).", (uint64_t)statbuf.st_size);
+		       "(%" PRIu64 " bytes).", (uint64_t)fw.size);
+		firmware_close(&fw);
 		return NULL;
 	}
 
 	/* The message length includes the 4-byte header. */
-	length = BITSTREAM_HEADER_SIZE + statbuf.st_size;
+	length = BITSTREAM_HEADER_SIZE + fw.size;
 	stream = g_try_malloc(length);
 	if (!stream) {
 		sr_err("Failed to allocate bitstream buffer.");
 		return NULL;
 	}
 
-	file = g_fopen(filename, "rb");
-	if (!file) {
-		sr_err("Failed to open bitstream file: %s.", g_strerror(errno));
-		g_free(stream);
-		return NULL;
-	}
-
 	/* Write the message length header. */
 	*(uint32_t *)stream = GUINT32_TO_BE(length);
 
-	count = fread(stream + BITSTREAM_HEADER_SIZE,
-		      length - BITSTREAM_HEADER_SIZE, 1, file);
-	if (count != 1) {
+	count = firmware_read(&fw, stream + BITSTREAM_HEADER_SIZE,
+			      length - BITSTREAM_HEADER_SIZE);
+	if (count != length - BITSTREAM_HEADER_SIZE) {
 		sr_err("Failed to read bitstream file: %s.", g_strerror(errno));
-		fclose(file);
+		firmware_close(&fw);
 		g_free(stream);
 		return NULL;
 	}
-	fclose(file);
+	firmware_close(&fw);
 
 	*length_p = length;
 	return stream;
@@ -93,7 +80,6 @@ static unsigned char *load_bitstream_file(const char *filename, int *length_p)
 SR_PRIV int lwla_send_bitstream(const struct sr_usb_dev_inst *usb,
 				const char *basename)
 {
-	char *filename;
 	unsigned char *stream;
 	int ret;
 	int length;
@@ -102,11 +88,9 @@ SR_PRIV int lwla_send_bitstream(const struct sr_usb_dev_inst *usb,
 	if (!usb || !basename)
 		return SR_ERR_BUG;
 
-	filename = g_build_filename(FIRMWARE_DIR, basename, NULL);
-	sr_info("Downloading FPGA bitstream at '%s'.", filename);
+	sr_info("Downloading FPGA bitstream at '%s'.", basename);
 
-	stream = load_bitstream_file(filename, &length);
-	g_free(filename);
+	stream = load_bitstream_file(basename, &length);
 
 	if (!stream)
 		return SR_ERR;

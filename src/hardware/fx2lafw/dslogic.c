@@ -38,21 +38,20 @@
 int dslogic_fpga_firmware_upload(const struct sr_dev_inst *sdi,
 		const char *filename)
 {
-	FILE *fw;
-	struct stat st;
+	struct sr_firmware_inst fw;
 	struct sr_usb_dev_inst *usb;
 	int chunksize, result, ret;
 	unsigned char *buf;
 	int sum, transferred;
 	uint8_t cmd[3];
 
-	sr_dbg("Uploading FPGA firmware at %s.", filename);
-
-	usb = sdi->conn;
-	if (stat(filename, &st) < 0) {
-		sr_err("Unable to upload FPGA firmware: %s", g_strerror(errno));
+	if (firmware_open(&fw, filename) != SR_OK) {
 		return SR_ERR;
 	}
+
+	sr_dbg("Uploading FPGA firmware at %s.", fw.filename);
+
+	usb = sdi->conn;
 
 	/* Tell the device firmware is coming. */
 	memset(cmd, 0, sizeof(cmd));
@@ -60,14 +59,10 @@ int dslogic_fpga_firmware_upload(const struct sr_dev_inst *sdi,
 			LIBUSB_ENDPOINT_OUT, DS_CMD_FPGA_FW, 0x0000, 0x0000,
 			(unsigned char *)&cmd, sizeof(cmd), USB_TIMEOUT)) < 0) {
 		sr_err("Failed to upload FPGA firmware: %s.", libusb_error_name(ret));
+		firmware_close(&fw);
 		return SR_ERR;
 	}
 	buf = g_malloc(FW_BUFSIZE);
-
-	if (!(fw = g_fopen(filename, "rb"))) {
-		sr_err("Unable to open %s for reading: %s.", filename, g_strerror(errno));
-		return SR_ERR;
-	}
 
 	/* Give the FX2 time to get ready for FPGA firmware upload. */
 	g_usleep(FPGA_UPLOAD_DELAY);
@@ -75,7 +70,7 @@ int dslogic_fpga_firmware_upload(const struct sr_dev_inst *sdi,
 	sum = 0;
 	result = SR_OK;
 	while (1) {
-		if ((chunksize = fread(buf, 1, FW_BUFSIZE, fw)) == 0)
+		if ((chunksize = firmware_read(&fw, buf, FW_BUFSIZE)) == 0)
 			break;
 
 		if ((ret = libusb_bulk_transfer(usb->devhdl, 2 | LIBUSB_ENDPOINT_OUT,
@@ -87,7 +82,7 @@ int dslogic_fpga_firmware_upload(const struct sr_dev_inst *sdi,
 		}
 		sum += transferred;
 		sr_spew("Uploaded %d/%" PRIu64 " bytes.",
-			sum, (uint64_t)st.st_size);
+			sum, (uint64_t)fw.size);
 
 		if (transferred != chunksize) {
 			sr_err("Short transfer while uploading FPGA firmware.");
@@ -95,7 +90,7 @@ int dslogic_fpga_firmware_upload(const struct sr_dev_inst *sdi,
 			break;
 		}
 	}
-	fclose(fw);
+	firmware_close(&fw);
 	g_free(buf);
 	if (result == SR_OK)
 		sr_dbg("FPGA firmware upload done.");

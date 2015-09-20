@@ -578,6 +578,28 @@ struct sr_usbtmc_dev_inst {
 	int fd;
 };
 
+enum sr_firmware_type {
+	/** The firmware is stored in a regular file. */
+	SR_FIRMWARE_TYPE_FILE,
+	/** The firmware is stored in a zipfile. */
+	SR_FIRMWARE_TYPE_ZIPFILE,
+};
+
+struct sr_firmware_inst {
+	enum sr_firmware_type type;
+	char *filename;
+	size_t size;
+	union {
+		struct {
+			FILE *file;
+		} file;
+		struct {
+			struct zip *archive;
+			struct zip_file *zf;
+		} zipfile;
+	} context;
+};
+
 /* Private driver context. */
 struct drv_context {
 	/** sigrok context */
@@ -781,6 +803,12 @@ SR_PRIV struct soft_trigger_logic *soft_trigger_logic_new(
 SR_PRIV void soft_trigger_logic_free(struct soft_trigger_logic *st);
 SR_PRIV int soft_trigger_logic_check(struct soft_trigger_logic *st, uint8_t *buf,
 		int len, int *pre_trigger_samples);
+
+/*--- firmware.c ------------------------------------------------------------*/
+
+SR_PRIV int firmware_open(struct sr_firmware_inst *fw, const char *filename);
+SR_PRIV int firmware_close(struct sr_firmware_inst *fw);
+SR_PRIV size_t firmware_read(struct sr_firmware_inst *fw, void *buf, size_t count);
 
 /*--- hardware/serial.c -----------------------------------------------------*/
 

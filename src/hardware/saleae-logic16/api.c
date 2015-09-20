@@ -34,7 +34,7 @@
 
 #define USB_INTERFACE		0
 #define USB_CONFIGURATION	1
-#define FX2_FIRMWARE		FIRMWARE_DIR "/saleae-logic16-fx2.fw"
+#define FX2_FIRMWARE		"saleae-logic16-fx2.fw"
 
 #define MAX_RENUM_DELAY_MS	3000
 #define NUM_SIMUL_TRANSFERS	32

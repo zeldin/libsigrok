@@ -53,21 +53,18 @@ SR_PRIV int ezusb_reset(struct libusb_device_handle *hdl, int set_clear)
 SR_PRIV int ezusb_install_firmware(libusb_device_handle *hdl,
 				   const char *filename)
 {
-	FILE *fw;
+	struct sr_firmware_inst fw;
 	int offset, chunksize, ret, result;
 	unsigned char buf[4096];
 
-	sr_info("Uploading firmware at %s", filename);
-	if (!(fw = g_fopen(filename, "rb"))) {
-		sr_err("Unable to open firmware file %s for reading: %s",
-		       filename, g_strerror(errno));
+	if (firmware_open(&fw, filename) != SR_OK)
 		return SR_ERR;
-	}
+	sr_info("Uploading firmware at %s", fw.filename);
 
 	result = SR_OK;
 	offset = 0;
 	while (1) {
-		chunksize = fread(buf, 1, 4096, fw);
+		chunksize = firmware_read(&fw, buf, 4096);
 		if (chunksize == 0)
 			break;
 		ret = libusb_control_transfer(hdl, LIBUSB_REQUEST_TYPE_VENDOR |
@@ -82,7 +79,7 @@ SR_PRIV int ezusb_install_firmware(libusb_device_handle *hdl,
 		sr_info("Uploaded %d bytes", chunksize);
 		offset += chunksize;
 	}
-	fclose(fw);
+	firmware_close(&fw);
 	sr_info("Firmware upload done");
 
 	return result;
