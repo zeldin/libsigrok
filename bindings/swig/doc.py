@@ -85,7 +85,7 @@ for compound in index.findall('compound'):
     if language == 'java' and constants:
         print('%%typemap(javacode) %s %%{' % class_name)
         for member_name, brief in constants:
-            print('  /** %s */\n  public static final %s %s = new %s(classesJNI.%s_%s_get(), false);\n' % (
+            print('  /** %s */\n  public static final %s %s = new %s(classesJNI.%s_%s_get());\n' % (
                 brief, trimmed_name, member_name, trimmed_name,
                 trimmed_name, member_name))
         print('%}')
