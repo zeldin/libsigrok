@@ -158,14 +158,6 @@ for enum, (classname, classbrief) in classes.items():
     print('%%template(EnumValue%s) sigrok::EnumValue<sigrok::%s, enum %s>;' % (
         classname, classname, enum_name), file=swig)
 
-    # Export public constant names to SWIG
-    print('#undef %enumvalues', file=swig)
-    print('%define %enumvalues', file=swig)
-    for trimmed_name in trimmed_names:
-	print('%%enumvalue(%s, %s);' % ( classname, trimmed_name ),
-	    file=swig)
-    print('%enddef', file=swig)
-
     # Apply any language-specific extras.
     print('%%enumextras(%s);' % classname, file=swig)
 

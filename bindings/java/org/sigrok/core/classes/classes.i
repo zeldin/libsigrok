@@ -438,14 +438,7 @@ typedef jobject jdatafeedcallback;
 
 %include "doc.i"
 
-%define %enumvalue(Class, Value)
-    public static final int Value = get##Value();
-%enddef
-
 %define %enumextras(Class)
-%typemap(javacode,noblock=1) sigrok::Class {
-%enumvalues
-}
 %enddef
 
 /* Ignore these for now, need fixes. */
