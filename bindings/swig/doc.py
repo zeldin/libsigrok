@@ -41,13 +41,16 @@ for compound in index.findall('compound'):
     trimmed_name = class_name.split('::')[1]
     doc = ElementTree.parse("%s/%s.xml" % (input_dir, compound.attrib['refid']))
     cls = doc.find('compounddef')
+    baseref = cls.find('basecompoundref')
+    is_enum = baseref is not None and baseref.text.startswith('sigrok::EnumValue')
     brief = get_text(cls.find('briefdescription'))
     if brief:
         if language == 'python':
             print('%%feature("docstring") %s "%s";' % (class_name, brief))
         elif language == 'java':
-            print('%%typemap(javaclassmodifiers) %s "/** %s */\npublic class"' % (
-            class_name, brief))
+	    modifiers = 'final ' if is_enum else ''
+            print('%%typemap(javaclassmodifiers) %s "/** %s */\npublic %sclass"' % (
+            class_name, brief, modifiers))
     constants = []
     for section in cls.findall('sectiondef'):
         kind = section.attrib['kind']
