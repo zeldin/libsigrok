@@ -211,7 +211,7 @@ protected:
 };
 
 /** Type of log callback */
-typedef function<void(const LogLevel *, string message)> LogCallbackFunction;
+typedef function<void(LogLevel, string message)> LogCallbackFunction;
 
 /** Resource reader delegate. */
 class SR_API ResourceReader
@@ -253,10 +253,10 @@ public:
 	/** Available output formats, indexed by name. */
 	map<string, shared_ptr<OutputFormat> > output_formats();
 	/** Current log level. */
-	const LogLevel *log_level() const;
+	LogLevel log_level() const;
 	/** Set the log level.
 	 * @param level LogLevel to use. */
-	void set_log_level(const LogLevel *level);
+	void set_log_level(LogLevel level);
 	/** Set the log callback.
 	 * @param callback Callback of the form callback(LogLevel, string). */
 	void set_log_callback(LogCallbackFunction callback);
@@ -274,15 +274,15 @@ public:
 	shared_ptr<Packet> create_header_packet(Glib::TimeVal start_time);
 	/** Create a meta packet. */
 	shared_ptr<Packet> create_meta_packet(
-		map<const ConfigKey *, Glib::VariantBase> config);
+		map<ConfigKey, Glib::VariantBase> config);
 	/** Create a logic packet. */
 	shared_ptr<Packet> create_logic_packet(
 		void *data_pointer, size_t data_length, unsigned int unit_size);
 	/** Create an analog packet. */
 	shared_ptr<Packet> create_analog_packet(
 		vector<shared_ptr<Channel> > channels,
-		float *data_pointer, unsigned int num_samples, const Quantity *mq,
-		const Unit *unit, vector<const QuantityFlag *> mqflags);
+		float *data_pointer, unsigned int num_samples, Quantity mq,
+		const Unit unit, vector<QuantityFlag> mqflags);
 	/** Load a saved session.
 	 * @param filename File name string. */
 	shared_ptr<Session> load_session(string filename);
@@ -322,18 +322,18 @@ class SR_API Configurable
 public:
 	/** Read configuration for the given key.
 	 * @param key ConfigKey to read. */
-	Glib::VariantBase config_get(const ConfigKey *key) const;
+	Glib::VariantBase config_get(const ConfigKey key) const;
 	/** Set configuration for the given key to a specified value.
 	 * @param key ConfigKey to set.
 	 * @param value Value to set. */
-	void config_set(const ConfigKey *key, const Glib::VariantBase &value);
+	void config_set(ConfigKey key, const Glib::VariantBase &value);
 	/** Enumerate available values for the given configuration key.
 	 * @param key ConfigKey to enumerate values for. */
-	Glib::VariantContainerBase config_list(const ConfigKey *key) const;
+	Glib::VariantContainerBase config_list(const ConfigKey key) const;
 	/** Enumerate available keys, according to a given index key. */
-	map<const ConfigKey *, set<enum Capability> > config_keys(const ConfigKey *key);
+	map<const ConfigKey, set<enum Capability> > config_keys(const ConfigKey key);
 	/** Check for a key in the list from a given index key. */
-	bool config_check(const ConfigKey *key, const ConfigKey *index_key) const;
+	bool config_check(const ConfigKey key, const ConfigKey index_key) const;
 protected:
 	Configurable(
 		struct sr_dev_driver *driver,
@@ -357,8 +357,8 @@ public:
 	string long_name() const;
 	/** Scan for devices and return a list of devices found.
 	 * @param options Mapping of (ConfigKey, value) pairs. */
-	vector<shared_ptr<HardwareDevice> > scan(map<const ConfigKey *, Glib::VariantBase>
-			options = map<const ConfigKey *, Glib::VariantBase>());
+	vector<shared_ptr<HardwareDevice> > scan(map<ConfigKey, Glib::VariantBase>
+			options = map<ConfigKey, Glib::VariantBase>());
 private:
 	struct sr_dev_driver *_structure;
 	bool _initialized;
@@ -459,7 +459,7 @@ public:
 	 * @param name Name string to set. */
 	void set_name(string name);
 	/** Type of this channel. */
-	const ChannelType *type() const;
+	const ChannelType type() const;
 	/** Enabled status of this channel. */
 	bool enabled() const;
 	/** Set the enabled status of this channel.
@@ -471,7 +471,6 @@ private:
 	explicit Channel(struct sr_channel *structure);
 	~Channel();
 	struct sr_channel *_structure;
-	const ChannelType * const _type;
 	friend class Device;
 	friend class UserDevice;
 	friend class ChannelGroup;
@@ -555,7 +554,7 @@ public:
 	/** Channel this condition matches on. */
 	shared_ptr<Channel> channel();
 	/** Type of match. */
-	const TriggerMatchType *type() const;
+	const TriggerMatchType type() const;
 	/** Threshold value. */
 	float value() const;
 private:
@@ -662,7 +661,7 @@ class SR_API Packet : public UserOwned<Packet>
 {
 public:
 	/** Type of this packet. */
-	const PacketType *type() const;
+	const PacketType type() const;
 	/** Payload of this packet. */
 	shared_ptr<PacketPayload> payload();
 private:
@@ -725,14 +724,14 @@ class SR_API Meta :
 {
 public:
 	/* Mapping of (ConfigKey, value) pairs. */
-	map<const ConfigKey *, Glib::VariantBase> config() const;
+	map<ConfigKey, Glib::VariantBase> config() const;
 private:
 	explicit Meta(const struct sr_datafeed_meta *structure);
 	~Meta();
 	shared_ptr<PacketPayload> share_owned_by(shared_ptr<Packet> parent);
 
 	const struct sr_datafeed_meta *_structure;
-	map<const ConfigKey *, Glib::VariantBase> _config;
+	map<ConfigKey, Glib::VariantBase> _config;
 
 	friend class Packet;
 };
@@ -772,11 +771,11 @@ public:
 	/** Channels for which this packet contains data. */
 	vector<shared_ptr<Channel> > channels();
 	/** Measured quantity of the samples in this packet. */
-	const Quantity *mq() const;
+	Quantity mq() const;
 	/** Unit of the samples in this packet. */
-	const Unit *unit() const;
+	Unit unit() const;
 	/** Measurement flags associated with the samples in this packet. */
-	vector<const QuantityFlag *> mq_flags() const;
+	vector<QuantityFlag> mq_flags() const;
 private:
 	explicit Analog(const struct sr_datafeed_analog *structure);
 	~Analog();
@@ -952,6 +951,8 @@ private:
 template <class Class, typename Enum> class SR_API EnumValue
 {
 public:
+	operator Enum () const { return _id; }
+
 	/** The integer constant associated with this value. */
 	int id() const
 	{
@@ -960,35 +961,34 @@ public:
 	/** The name associated with this value. */
 	string name() const
 	{
-		return _name;
-	}
-	/** Get value associated with a given integer constant. */
-	static const Class *get(int id)
-	{
-		const auto pos = _values.find(static_cast<Enum>(id));
+		const auto pos = _values.find(_id);
 		if (pos == _values.end())
 			throw Error(SR_ERR_ARG);
 		return pos->second;
 	}
-	/** Get possible values. */
-	static std::vector<const Class *> values()
+	/** Get value associated with a given integer constant. */
+	static Class get(int id)
 	{
-		std::vector<const Class *> result;
+		return static_cast<Enum>(id);
+	}
+	/** Get possible values. */
+	static std::vector<Class> values()
+	{
+		std::vector<Class> result;
 		for (auto entry : _values)
-			result.push_back(entry.second);
+			result.push_back(entry.first);
 		return result;
 	}
 protected:
-	EnumValue(Enum id, const char name[]) : _id(id), _name(name)
+	EnumValue(Enum id) : _id(id)
 	{
 	}
 	~EnumValue()
 	{
 	}
 private:
-	static const std::map<const Enum, const Class * const> _values;
-	const Enum _id;
-	const string _name;
+	static const std::map<const Enum, const char * const> _values;
+	Enum _id;
 };
 
 }

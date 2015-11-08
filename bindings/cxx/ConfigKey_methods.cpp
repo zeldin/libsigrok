@@ -1,4 +1,4 @@
-const DataType *ConfigKey::data_type() const
+DataType ConfigKey::data_type() const
 {
 	const struct sr_key_info *info = sr_key_info_get(SR_KEY_CONFIG, id());
 	if (!info)
@@ -22,7 +22,7 @@ string ConfigKey::description() const
 	return valid_string(info->name);
 }
 
-const ConfigKey *ConfigKey::get_by_identifier(string identifier)
+ConfigKey ConfigKey::get_by_identifier(string identifier)
 {
 	const struct sr_key_info *info = sr_key_info_name_get(SR_KEY_CONFIG, identifier.c_str());
 	if (!info)
@@ -75,7 +75,7 @@ Glib::VariantBase ConfigKey::parse_string(string value) const
 	GVariant *variant;
 	uint64_t p, q;
 
-	switch (data_type()->id())
+	switch (data_type())
 	{
 		case SR_T_UINT64:
 			check(sr_parse_sizestring(value.c_str(), &p));

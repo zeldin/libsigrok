@@ -58,16 +58,17 @@ namespace std {
 /* Workaround for SWIG bug. The vector template instantiation
    isn't needed but somehow fixes a bug that stops the wrapper
    for the map instantiation from compiling. */
+%ignore std::vector<sigrok::ConfigKey>::vector(size_type);
 %template(ConfigVector)
-    std::vector<const sigrok::ConfigKey *>;
+    std::vector<sigrok::ConfigKey>;
 %template(ConfigMap)
-    std::map<const sigrok::ConfigKey *, Glib::VariantBase>;
+    std::map<sigrok::ConfigKey, Glib::VariantBase>;
 
 %template(CapabilitySet)
     std::set<enum sigrok::Capability>;
 
 %template(ConfigKeys)
-    std::map<const sigrok::ConfigKey *, std::set<enum sigrok::Capability> >;
+    std::map<sigrok::ConfigKey, std::set<enum sigrok::Capability> >;
 
 %template(OptionVector)
     std::vector<std::shared_ptr<sigrok::Option> >;
@@ -79,8 +80,9 @@ namespace std {
 %template(VariantMap)
     std::map<std::string, Glib::VariantBase>;
 
+%ignore std::vector<sigrok::QuantityFlag>::vector(size_type);
 %template(QuantityFlagVector)
-    std::vector<const sigrok::QuantityFlag *>;
+    std::vector<sigrok::QuantityFlag>;
 
 %template(TriggerStageVector)
  std::vector<std::shared_ptr<sigrok::TriggerStage> >;

@@ -83,12 +83,12 @@ header_public_template = """
 class SR_API {classname} : public EnumValue<{classname}, enum {enumname}>
 {{
 public:
+    {classname}(enum {enumname} id) : EnumValue(id) {{}}
 """
 
 # Template for beginning of private members.
 header_private_template = """
 protected:
-    {classname}(enum {enumname} id, const char name[]) : EnumValue(id, name) {{}}
 """
 
 def get_text(node):
@@ -107,11 +107,11 @@ for enum, (classname, classbrief) in classes.items():
     print(header_public_template.format(
         brief=classbrief, classname=classname, enumname=enum_name), file=header)
 
-    # Declare public pointers for each enum value
+    # Declare public constants for each enum value
     for trimmed_name, brief in zip(trimmed_names, briefs):
         if brief:
             print('\t/** %s */' % brief, file=header)
-        print('\tstatic const %s * const %s;' % (
+        print('\tstatic const %s %s;' % (
             classname, trimmed_name), file=header)
 
     # Declare additional methods if present
@@ -123,30 +123,20 @@ for enum, (classname, classbrief) in classes.items():
     print(header_private_template.format(
         classname=classname, enumname=enum_name), file=header)
 
-    # Declare private constants for each enum value
-    for trimmed_name in trimmed_names:
-        print('\tstatic const %s _%s;' % (classname, trimmed_name), file=header)
-
     # End class declaration
     print('};', file=header)
 
-    # Define private constants for each enum value
+    # Define public constants for each enum value
     for name, trimmed_name in zip(member_names, trimmed_names):
-        print('const %s %s::_%s = %s(%s, "%s");' % (
-            classname, classname, trimmed_name, classname, name, trimmed_name),
-            file=code)
+	print('const %s %s::%s = %s(%s);' % (
+	    classname, classname, trimmed_name, classname, name),
+	    file=header)
 
-    # Define public pointers for each enum value
-    for trimmed_name in trimmed_names:
-        print('const %s * const %s::%s = &%s::_%s;' % (
-            classname, classname, trimmed_name, classname, trimmed_name),
-            file=code)
-
-    # Define map of enum values to constants
-    print('template<> const SR_API std::map<const enum %s, const %s * const> EnumValue<%s, enum %s>::_values = {' % (
-        enum_name, classname, classname, enum_name), file=code)
+    # Define map of enum values to names
+    print('template<> const SR_API std::map<const enum %s, const char * const> EnumValue<%s, enum %s>::_values = {' % (
+        enum_name, classname, enum_name), file=code)
     for name, trimmed_name in zip(member_names, trimmed_names):
-        print('\t{%s, %s::%s},' % (name, classname, trimmed_name), file=code)
+        print('\t{%s, \"%s\"},' % (name, trimmed_name), file=code)
     print('};', file=code)
 
     # Define additional methods if present

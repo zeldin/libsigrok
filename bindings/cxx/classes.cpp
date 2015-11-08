@@ -195,14 +195,14 @@ Context::~Context()
 	check(sr_exit(_structure));
 }
 
-const LogLevel *Context::log_level() const
+LogLevel Context::log_level() const
 {
 	return LogLevel::get(sr_log_loglevel_get());
 }
 
-void Context::set_log_level(const LogLevel *level)
+void Context::set_log_level(LogLevel level)
 {
-	check(sr_log_loglevel_set(level->id()));
+	check(sr_log_loglevel_set(level));
 }
 
 static int call_log_callback(void *cb_data, int loglevel,
@@ -278,7 +278,7 @@ shared_ptr<Packet> Context::create_header_packet(Glib::TimeVal start_time)
 }
 
 shared_ptr<Packet> Context::create_meta_packet(
-	map<const ConfigKey *, Glib::VariantBase> config)
+	map<ConfigKey, Glib::VariantBase> config)
 {
 	auto meta = g_new0(struct sr_datafeed_meta, 1);
 	for (const auto &input : config)
@@ -286,7 +286,7 @@ shared_ptr<Packet> Context::create_meta_packet(
 		const auto &key = input.first;
 		const auto &value = input.second;
 		auto *const output = g_new(struct sr_config, 1);
-		output->key = key->id();
+		output->key = key;
 		output->data = value.gobj_copy();
 		meta->config = g_slist_append(meta->config, output);
 	}
@@ -312,8 +312,8 @@ shared_ptr<Packet> Context::create_logic_packet(
 
 shared_ptr<Packet> Context::create_analog_packet(
 	vector<shared_ptr<Channel> > channels,
-	float *data_pointer, unsigned int num_samples, const Quantity *mq,
-	const Unit *unit, vector<const QuantityFlag *> mqflags)
+	float *data_pointer, unsigned int num_samples, Quantity mq,
+	const Unit unit, vector<QuantityFlag> mqflags)
 {
 	auto analog = g_new0(struct sr_datafeed_analog, 1);
 	auto meaning = g_new0(struct sr_analog_meaning, 1);
@@ -323,9 +323,9 @@ shared_ptr<Packet> Context::create_analog_packet(
 	for (const auto &channel : channels)
 		meaning->channels = g_slist_append(meaning->channels, channel->_structure);
 	analog->num_samples = num_samples;
-	meaning->mq = static_cast<sr_mq>(mq->id());
-	meaning->unit = static_cast<sr_unit>(unit->id());
-	meaning->mqflags = static_cast<sr_mqflag>(QuantityFlag::mask_from_flags(move(mqflags)));
+	meaning->mq = mq;
+	meaning->unit = unit;
+	meaning->mqflags = QuantityFlag::mask_from_flags(move(mqflags));
 	analog->data = data_pointer;
 	auto packet = g_new(struct sr_datafeed_packet, 1);
 	packet->type = SR_DF_ANALOG;
@@ -407,7 +407,7 @@ string Driver::long_name() const
 }
 
 vector<shared_ptr<HardwareDevice>> Driver::scan(
-	map<const ConfigKey *, Glib::VariantBase> options)
+	map<ConfigKey, Glib::VariantBase> options)
 {
 	/* Initialise the driver if not yet done. */
 	if (!_initialized)
@@ -423,7 +423,7 @@ vector<shared_ptr<HardwareDevice>> Driver::scan(
 		const auto &key = entry.first;
 		const auto &value = entry.second;
 		auto *const config = g_new(struct sr_config, 1);
-		config->key = key->id();
+		config->key = key.id();
 		config->data = const_cast<GVariant*>(value.gobj());
 		option_list = g_slist_append(option_list, config);
 	}
@@ -466,41 +466,41 @@ Configurable::~Configurable()
 {
 }
 
-Glib::VariantBase Configurable::config_get(const ConfigKey *key) const
+Glib::VariantBase Configurable::config_get(const ConfigKey key) const
 {
 	GVariant *data;
 	check(sr_config_get(
 		config_driver, config_sdi, config_channel_group,
-		key->id(), &data));
+		key, &data));
 	return Glib::VariantBase(data);
 }
 
-void Configurable::config_set(const ConfigKey *key, const Glib::VariantBase &value)
+void Configurable::config_set(const ConfigKey key, const Glib::VariantBase &value)
 {
 	check(sr_config_set(
 		config_sdi, config_channel_group,
-		key->id(), const_cast<GVariant*>(value.gobj())));
+		key, const_cast<GVariant*>(value.gobj())));
 }
 
-Glib::VariantContainerBase Configurable::config_list(const ConfigKey *key) const
+Glib::VariantContainerBase Configurable::config_list(const ConfigKey key) const
 {
 	GVariant *data;
 	check(sr_config_list(
 		config_driver, config_sdi, config_channel_group,
-		key->id(), &data));
+		key, &data));
 	return Glib::VariantContainerBase(data);
 }
 
-map<const ConfigKey *, set<Capability>> Configurable::config_keys(const ConfigKey *key)
+map<const ConfigKey, set<Capability>> Configurable::config_keys(const ConfigKey key)
 {
 	GVariant *gvar_opts;
 	gsize num_opts;
 	const uint32_t *opts;
-	map<const ConfigKey *, set<Capability>> result;
+	map<const ConfigKey, set<Capability>> result;
 
 	check(sr_config_list(
 		config_driver, config_sdi, config_channel_group,
-		key->id(), &gvar_opts));
+		key, &gvar_opts));
 
 	opts = static_cast<const uint32_t *>(g_variant_get_fixed_array(
 		gvar_opts, &num_opts, sizeof(uint32_t)));
@@ -523,15 +523,15 @@ map<const ConfigKey *, set<Capability>> Configurable::config_keys(const ConfigKe
 	return result;
 }
 
-bool Configurable::config_check(const ConfigKey *key,
-	const ConfigKey *index_key) const
+bool Configurable::config_check(const ConfigKey key,
+	const ConfigKey index_key) const
 {
 	GVariant *gvar_opts;
 	gsize num_opts;
 	const uint32_t *opts;
 
 	if (sr_config_list(config_driver, config_sdi, config_channel_group,
-			index_key->id(), &gvar_opts) != SR_OK)
+			index_key, &gvar_opts) != SR_OK)
 		return false;
 
 	opts = static_cast<const uint32_t *>(g_variant_get_fixed_array(
@@ -539,7 +539,7 @@ bool Configurable::config_check(const ConfigKey *key,
 
 	for (gsize i = 0; i < num_opts; i++)
 	{
-		if ((opts[i] & SR_CONF_MASK) == unsigned(key->id()))
+		if ((opts[i] & SR_CONF_MASK) == unsigned(key))
 		{
 			g_variant_unref(gvar_opts);
 			return true;
@@ -685,8 +685,7 @@ shared_ptr<Channel> UserDevice::add_channel(unsigned int index,
 }
 
 Channel::Channel(struct sr_channel *structure) :
-	_structure(structure),
-	_type(ChannelType::get(_structure->type))
+	_structure(structure)
 {
 }
 
@@ -704,7 +703,7 @@ void Channel::set_name(string name)
 	check(sr_dev_channel_name_set(_structure, name.c_str()));
 }
 
-const ChannelType *Channel::type() const
+const ChannelType Channel::type() const
 {
 	return ChannelType::get(_structure->type);
 }
@@ -845,7 +844,7 @@ shared_ptr<Channel> TriggerMatch::channel()
 	return _channel;
 }
 
-const TriggerMatchType *TriggerMatch::type() const
+const TriggerMatchType TriggerMatch::type() const
 {
 	return TriggerMatchType::get(_structure->match);
 }
@@ -1070,7 +1069,7 @@ Packet::~Packet()
 {
 }
 
-const PacketType *Packet::type() const
+const PacketType Packet::type() const
 {
 	return PacketType::get(_structure->type);
 }
@@ -1135,9 +1134,9 @@ shared_ptr<PacketPayload> Meta::share_owned_by(shared_ptr<Packet> _parent)
 		ParentOwned::share_owned_by(_parent));
 }
 
-map<const ConfigKey *, Glib::VariantBase> Meta::config() const
+map<ConfigKey, Glib::VariantBase> Meta::config() const
 {
-	map<const ConfigKey *, Glib::VariantBase> result;
+	map<ConfigKey, Glib::VariantBase> result;
 	for (auto l = _structure->config; l; l = l->next) {
 		auto *const config = static_cast<struct sr_config *>(l->data);
 		result[ConfigKey::get(config->key)] = Glib::VariantBase(config->data);
@@ -1212,17 +1211,17 @@ vector<shared_ptr<Channel>> Analog::channels()
 	return result;
 }
 
-const Quantity *Analog::mq() const
+Quantity Analog::mq() const
 {
 	return Quantity::get(_structure->meaning->mq);
 }
 
-const Unit *Analog::unit() const
+Unit Analog::unit() const
 {
 	return Unit::get(_structure->meaning->unit);
 }
 
-vector<const QuantityFlag *> Analog::mq_flags() const
+vector<QuantityFlag> Analog::mq_flags() const
 {
 	return QuantityFlag::flags_from_mask(_structure->meaning->mqflags);
 }
