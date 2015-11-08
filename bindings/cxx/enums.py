@@ -71,6 +71,7 @@ for compound in index.findall('compound'):
 header = open(os.path.join(outdirname, 'cxx/include/libsigrokcxx/enums.hpp'), 'w')
 code = open(os.path.join(outdirname, 'cxx/enums.cpp'), 'w')
 swig = open(os.path.join(outdirname, 'swig/enums.i'), 'w')
+swig_typemap = open(os.path.join(outdirname, 'swig/enums_typemap.i'), 'w')
 
 for file in (header, code):
     print("/* Generated file - edit enums.py instead! */", file=file)
@@ -144,6 +145,10 @@ for enum, (classname, classbrief) in classes.items():
     if os.path.exists(filename):
         print(str.join('', open(filename).readlines()), file=code)
 
+    # Create hooks for SWIG typemaps
+    print('%%enumsetup(%s, enum %s);' % (
+        classname, enum_name), file=swig_typemap)
+
     # Map EnumValue::id() and EnumValue::name() as SWIG attributes.
     print('%%attribute(sigrok::%s, int, id, id);' % classname, file=swig)
     print('%%attributestring(sigrok::%s, std::string, name, name);' % classname,
@@ -152,6 +157,14 @@ for enum, (classname, classbrief) in classes.items():
     # Instantiate EnumValue template for SWIG
     print('%%template(EnumValue%s) sigrok::EnumValue<sigrok::%s, enum %s>;' % (
         classname, classname, enum_name), file=swig)
+
+    # Export public constant names to SWIG
+    print('#undef %enumvalues', file=swig)
+    print('%define %enumvalues', file=swig)
+    for trimmed_name in trimmed_names:
+	print('%%enumvalue(%s, %s);' % ( classname, trimmed_name ),
+	    file=swig)
+    print('%enddef', file=swig)
 
     # Apply any language-specific extras.
     print('%%enumextras(%s);' % classname, file=swig)
