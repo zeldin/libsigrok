@@ -44,6 +44,35 @@ namespace Glib {
   class VariantBase {};
 }
 
+/* Simplified enums */
+%define %enumsetup(Type, Enum)
+%typemap(jni) sigrok::Type, sigrok::Type const *, sigrok::Type const & "jint"
+%typemap(jtype) sigrok::Type, sigrok::Type const *, sigrok::Type const & "int"
+%typemap(jstype) sigrok::Type, sigrok::Type const *, sigrok::Type const & "int"
+%typemap(javain) sigrok::Type, sigrok::Type const *, sigrok::Type const & "$javainput"
+%typemap(javaout) sigrok::Type, sigrok::Type const *, sigrok::Type const & {
+  return $jnicall;
+}
+%typemap(in) sigrok::Type "$1 = static_cast<Enum>($input);"
+%typemap(in) sigrok::Type const * (sigrok::Type temp = static_cast<Enum>(0)), sigrok::Type const & (sigrok::Type temp = static_cast<Enum>(0)) {
+  temp = static_cast<Enum>($input);
+  $1 = &temp;
+}
+%typemap(out) sigrok::Type "$result = $1.id();"
+%typemap(out) sigrok::Type const *, sigrok::Type const & {
+  $result = $1->id();
+}
+%typemap(javabody) sigrok::Type ""
+%typemap(javadestruct) sigrok::Type ""
+%typemap(javaclassmodifiers) sigrok::Type "public final class"
+%nodefaultctor sigrok::Type;
+%nodefaultdtor sigrok::Type;
+%ignore operator Enum;
+%ignore sigrok::Type::Type(Enum id);
+%ignore sigrok::EnumValue<sigrok::Type,Enum>;
+%enddef
+%include "swig/enums_typemap.i"
+
 %include "bindings/swig/templates.i"
 
 /* Map between std::vector and java.util.Vector */
@@ -165,44 +194,43 @@ STRING_TO_SHARED_PTR_MAP(OutputFormat)
 
 /* Specialisation for ConfigKey->Variant maps */
 
-MAP_COMMON(const sigrok::ConfigKey *, Glib::VariantBase, ConfigKey, Variant)
+MAP_COMMON(sigrok::ConfigKey, Glib::VariantBase, Integer, Variant)
 
-%typemap(jni) std::map<const sigrok::ConfigKey, Glib::VariantBase> "jobject"
-%typemap(jtype) std::map<const sigrok::ConfigKey, Glib::VariantBase>
-  "java.util.Map<ConfigKey,Variant>"
+%typemap(jni) std::map<sigrok::ConfigKey, Glib::VariantBase> "jobject"
+%typemap(jtype) std::map<sigrok::ConfigKey, Glib::VariantBase> config
+  "java.util.Map<Integer,Variant>"
 
-%typemap(out) std::map<const sigrok::ConfigKey *, Glib::VariantBase> {
+%typemap(out) std::map<sigrok::ConfigKey, Glib::VariantBase> {
   jclass HashMap = jenv->FindClass("java/util/HashMap");
   jmethodID HashMap_init = jenv->GetMethodID(HashMap, "<init>", "()V");
   jmethodID HashMap_put = jenv->GetMethodID(HashMap, "put",
     "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-  jclass ConfigKey = jenv->FindClass("org/sigrok/core/classes/ConfigKey");
-  jmethodID ConfigKey_init = jenv->GetMethodID(ConfigKey, "<init>", "(JZ)V");
+  jclass Integer = jenv->FindClass("java/lang/Integer");
+  jmethodID Integer_init = jenv->GetMethodID(Integer, "<init>", "(I)V");
   jclass Variant = jenv->FindClass("org/sigrok/core/classes/Variant");
   jmethodID Variant_init = jenv->GetMethodID(Variant, "<init>", "(JZ)V");
   $result = jenv->NewObject(HashMap, HashMap_init);
-  jlong key = 0;
   jlong value = 0;
   for (auto entry : $1)
   {
-    *(const sigrok::ConfigKey **) &key = entry.first;
+    jint key = entry.first;
     *(Glib::VariantBase **) &value = new Glib::VariantBase(entry.second);
     jenv->CallObjectMethod($result, HashMap_put,
-      jenv->NewObject(ConfigKey, ConfigKey_init, key, false));
+      jenv->NewObject(Integer, Integer_init, key),
       jenv->NewObject(Variant, Variant_init, value, true));
   }
 }
 
 /* Specialisation for ConfigKey->set<Capability> maps */
 
-MAP_COMMON(const sigrok::ConfigKey *, std::set<enum sigrok::Capability>,
+MAP_COMMON(sigrok::ConfigKey, std::set<enum sigrok::Capability>,
   ConfigKey, java.util.Set<Capability>)
 
-%typemap(jni) std::map<const sigrok::ConfigKey *, std::set<enum sigrok::Capability> > "jobject"
-%typemap(jtype) std::map<const sigrok::ConfigKey *, std::set<enum sigrok::Capability> >
+%typemap(jni) std::map<sigrok::ConfigKey, std::set<enum sigrok::Capability> > "jobject"
+%typemap(jtype) std::map<sigrok::ConfigKey, std::set<enum sigrok::Capability> >
   "java.util.Map<ConfigKey,java.util.Set<Capability>>"
 
-%typemap(out) std::map<const sigrok::ConfigKey *, std::set<enum sigrok::Capability> > {
+%typemap(out) std::map<sigrok::ConfigKey, std::set<enum sigrok::Capability> > {
   jclass HashMap = jenv->FindClass("java/util/HashMap");
   jmethodID HashMap_init = jenv->GetMethodID(HashMap, "<init>", "()V");
   jmethodID HashMap_put = jenv->GetMethodID(HashMap, "put",
@@ -211,23 +239,22 @@ MAP_COMMON(const sigrok::ConfigKey *, std::set<enum sigrok::Capability>,
   jmethodID HashSet_init = jenv->GetMethodID(HashSet, "<init>", "()V");
   jmethodID HashSet_add = jenv->GetMethodID(HashSet, "add",
     "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-  jclass ConfigKey = jenv->FindClass("org/sigrok/core/classes/ConfigKey");
-  jmethodID ConfigKey_init = jenv->GetMethodID(ConfigKey, "<init>", "(JZ)V");
+  jclass Integer = jenv->FindClass("java/lang/Integer");
+  jmethodID Integer_init = jenv->GetMethodID(Integer, "<init>", "(I)V");
   jclass Capability = jenv->FindClass("org/sigrok/core/classes/Capability");
   jmethodID Capability_swigToEnum = jenv->GetStaticMethodID(Capability,
     "swigToEnum", "(I)Lorg/sigrok/core/classes/Capability;");
   $result = jenv->NewObject(HashMap, HashMap_init);
-  jlong key = 0;
   for (auto map_entry : $1)
   {
-    *(const sigrok::ConfigKey **) &key = map_entry.first;
+    jint key = map_entry.first;
     jobject value = jenv->NewObject(HashSet, HashSet_init);
     for (auto &set_entry : map_entry.second)
       jenv->CallObjectMethod(value, HashSet_add,
         jenv->CallStaticObjectMethod(Capability,
           Capability_swigToEnum, set_entry));
     jenv->CallObjectMethod($result, HashMap_put,
-      jenv->NewObject(ConfigKey, ConfigKey_init, key, false), value);
+      jenv->NewObject(Integer, Integer_init, key), value);
   }
 }
 
@@ -325,24 +352,19 @@ typedef jobject jlogcallback;
     env->GetJavaVM(&jvm);
     jclass obj_class = env->GetObjectClass(obj);
     jmethodID method = env->GetMethodID(obj_class, "run",
-      "(Lorg/sigrok/core/classes/LogLevel;Ljava/lang/String;)V");
-    GlobalRef<jclass> LogLevel(jvm, env->FindClass("org/sigrok/core/classes/LogLevel"));
-    jmethodID LogLevel_init = env->GetMethodID(LogLevel, "<init>", "(JZ)V");
+      "(ILjava/lang/String;)V");
     GlobalRef<jobject> obj_ref(jvm, obj);
 
     $self->set_log_callback([=] (
-      const sigrok::LogLevel *loglevel,
+      sigrok::LogLevel loglevel,
       std::string message)
     {
       ScopedEnv env(jvm);
       if (!env)
         throw sigrok::Error(SR_ERR);
-      jlong loglevel_addr = 0;
-      *(const sigrok::LogLevel **) &loglevel_addr = loglevel;
-      jobject loglevel_obj = env->NewObject(
-        LogLevel, LogLevel_init, loglevel_addr, false);
+      jint loglevel_int = loglevel;
       jobject message_obj = env->NewStringUTF(message.c_str());
-      env->CallVoidMethod(obj_ref, method, loglevel_obj, message_obj);
+      env->CallVoidMethod(obj_ref, method, loglevel_int, message_obj);
       if (env->ExceptionCheck())
         throw sigrok::Error(SR_ERR);
     });
@@ -402,9 +424,28 @@ typedef jobject jdatafeedcallback;
   }
 }
 
+/* Fixup for extra ConfigKey methods */
+%extend sigrok::ConfigKey {
+    static DataType data_type(sigrok::ConfigKey key) { return key.data_type(); }
+    static string identifier(sigrok::ConfigKey key) { return key.identifier(); }
+    static string description(sigrok::ConfigKey key) { return key.description(); }
+    static Glib::VariantBase parse_string(sigrok::ConfigKey key, string value) { return key.parse_string(value); }
+}
+%ignore sigrok::ConfigKey::data_type;
+%ignore sigrok::ConfigKey::identifier;
+%ignore sigrok::ConfigKey::description;
+%ignore sigrok::ConfigKey::parse_string;
+
 %include "doc.i"
 
+%define %enumvalue(Class, Value)
+    public static final int Value = get##Value();
+%enddef
+
 %define %enumextras(Class)
+%typemap(javacode,noblock=1) sigrok::Class {
+%enumvalues
+}
 %enddef
 
 /* Ignore these for now, need fixes. */
