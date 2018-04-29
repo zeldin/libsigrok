@@ -157,6 +157,10 @@ static const uint64_t samplerates[] = {
 	SR_MHZ(12),
 	SR_MHZ(16),
 	SR_MHZ(24),
+	/* FX3 only rates below here */
+	SR_MHZ(32),
+	SR_MHZ(48),
+#define NUM_FX3_RATES 2
 };
 
 static gboolean is_plausible(const struct libusb_device_descriptor *des)
@@ -333,6 +337,8 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 
 		devc->samplerates = samplerates;
 		devc->num_samplerates = ARRAY_SIZE(samplerates);
+		if (!(prof->dev_caps & DEV_CAPS_FX3))
+			devc->num_samplerates -= NUM_FX3_RATES;
 		has_firmware = usb_match_manuf_prod(devlist[i],
 				"sigrok", "fx2lafw");
 
