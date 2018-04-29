@@ -105,6 +105,13 @@ static const struct fx2lafw_profile supported_fx2[] = {
 		"fx2lafw-sigrok-fx2-16ch.fw",
 		DEV_CAPS_16BIT, NULL, NULL },
 
+	/*
+	 * Cypress SuperSpeed Explorer Kit (CYUSB3KIT-003)
+	 */
+	{ 0x04b4, 0x00f3, "Cypress", "SuperSpeed Explorer Kit", NULL,
+		"fx3lafw-cypress-fx3.fw",
+		DEV_CAPS_FX3 | DEV_CAPS_16BIT, NULL, NULL },
+
 	ALL_ZERO
 };
 
@@ -339,7 +346,7 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 		} else {
 			if (ezusb_upload_firmware(drvc->sr_ctx, devlist[i],
 					USB_CONFIGURATION, prof->firmware,
-					FALSE) == SR_OK)
+					(prof->dev_caps & DEV_CAPS_FX3)) == SR_OK)
 				/* Store when this device's FW was updated. */
 				devc->fw_updated = g_get_monotonic_time();
 			else
