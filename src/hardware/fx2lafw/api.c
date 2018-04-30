@@ -160,7 +160,10 @@ static const uint64_t samplerates[] = {
 	/* FX3 only rates below here */
 	SR_MHZ(32),
 	SR_MHZ(48),
-#define NUM_FX3_RATES 2
+	SR_MHZ(64),
+	SR_MHZ(96),
+	SR_MHZ(192),
+#define NUM_FX3_RATES 5
 };
 
 static gboolean is_plausible(const struct libusb_device_descriptor *des)
