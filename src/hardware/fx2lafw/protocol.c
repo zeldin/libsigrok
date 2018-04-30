@@ -552,9 +552,9 @@ static int configure_channels(const struct sr_dev_inst *sdi)
 	return SR_OK;
 }
 
-static unsigned int to_bytes_per_ms(unsigned int samplerate)
+static unsigned int to_bytes_per_ms(unsigned int samplerate, unsigned int unitsize)
 {
-	return samplerate / 1000;
+	return samplerate * unitsize / 1000;
 }
 
 static size_t get_buffer_size(struct dev_context *devc)
@@ -565,7 +565,7 @@ static size_t get_buffer_size(struct dev_context *devc)
 	 * The buffer should be large enough to hold 10ms of data and
 	 * a multiple of 1024.
 	 */
-	s = 10 * to_bytes_per_ms(devc->cur_samplerate);
+	s = 10 * to_bytes_per_ms(devc->cur_samplerate, devc->unitsize);
 	if (devc->unitsize == 3) {
 	  /* Make it a multiple of 3K, to make sure we have an
 	     integral number of samples */
@@ -580,7 +580,7 @@ static unsigned int get_number_of_transfers(struct dev_context *devc)
 	unsigned int n;
 
 	/* Total buffer size should be able to hold about 500ms of data. */
-	n = (500 * to_bytes_per_ms(devc->cur_samplerate) /
+	n = (500 * to_bytes_per_ms(devc->cur_samplerate, devc->unitsize) /
 		get_buffer_size(devc));
 
 	if (n > NUM_SIMUL_TRANSFERS)
@@ -596,7 +596,7 @@ static unsigned int get_timeout(struct dev_context *devc)
 
 	total_size = get_buffer_size(devc) *
 			get_number_of_transfers(devc);
-	timeout = total_size / to_bytes_per_ms(devc->cur_samplerate);
+	timeout = total_size / to_bytes_per_ms(devc->cur_samplerate, devc->unitsize);
 	return timeout + timeout / 4; /* Leave a headroom of 25% percent. */
 }
 
