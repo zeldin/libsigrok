@@ -267,30 +267,61 @@ static gboolean parse_header(const struct sr_input *in, GString *buf)
 		} else if (g_strcmp0(name, "var") == 0) {
 			/* Format: $var type size identifier reference [opt. index] $end */
 			unsigned int length;
+			unsigned long multibit_first = 0;
+			unsigned long multibit_last = 0;
+			unsigned int multibit_length;
+			unsigned int bit;
+			char *endp;
 
 			parts = g_strsplit_set(contents, " \r\n\t", 0);
 			remove_empty_parts(parts);
 			length = g_strv_length(parts);
 
+			if (length == 5 && parts[4][0] == '[' && parts[4][1] != ':' &&
+			    (multibit_first = strtoul(&parts[4][1], &endp, 10)) <= INT_MAX &&
+			    endp[0] == ':' &&  endp[1] != ']' &&
+			    (multibit_last = strtoul(&endp[1], &endp, 10)) <= INT_MAX &&
+			    endp[0] == ']' && !endp[1])
+				multibit_length = (multibit_first > multibit_last?
+						   multibit_first - multibit_last + 1 :
+						   multibit_last - multibit_first + 1);
+			else
+				multibit_length = 1;
+
 			if (length != 4 && length != 5)
 				sr_warn("$var section should have 4 or 5 items");
 			else if (g_strcmp0(parts[0], "reg") != 0 && g_strcmp0(parts[0], "wire") != 0)
 				sr_info("Unsupported signal type: '%s'", parts[0]);
-			else if (strtol(parts[1], NULL, 10) != 1)
+			else if (strtol(parts[1], NULL, 10) != (long)multibit_length)
 				sr_info("Unsupported signal size: '%s'", parts[1]);
-			else if (inc->maxchannels && inc->channelcount >= inc->maxchannels)
+			else if (inc->maxchannels && inc->channelcount + multibit_length > inc->maxchannels)
 				sr_warn("Skipping '%s%s' because only %d channels requested.",
 					parts[3], parts[4] ? : "", inc->maxchannels);
-			else {
+			else for (bit = 0; bit < multibit_length; bit++) {
 				vcd_ch = g_malloc(sizeof(struct vcd_channel));
-				vcd_ch->identifier = g_strdup(parts[2]);
-				if (length == 4)
+				if (bit == 0)
+					vcd_ch->identifier = g_strdup(parts[2]);
+				else
+					vcd_ch->identifier = NULL;
+				if (multibit_length > 1)
+					vcd_ch->name = g_strdup_printf("%s[%u]", parts[3],
+								       (multibit_first > multibit_last?
+									((unsigned int)multibit_first) - bit :
+									((unsigned int)multibit_first) + bit));
+				else if (length == 4)
 					vcd_ch->name = g_strdup(parts[3]);
 				else
 					vcd_ch->name = g_strconcat(parts[3], parts[4], NULL);
 
-				sr_info("Channel %d is '%s' identified by '%s'.",
-						inc->channelcount, vcd_ch->name, vcd_ch->identifier);
+				if (bit == 0) {
+					if (multibit_length == 1)
+						sr_info("Channel %d is '%s' identified by '%s'.",
+								inc->channelcount, vcd_ch->name, vcd_ch->identifier);
+					else
+						sr_info("Channel %d-%d is '%s%s' identified by '%s'.",
+							inc->channelcount, inc->channelcount + multibit_length - 1,
+							parts[3], parts[4], vcd_ch->identifier);
+				}					
 
 				sr_channel_new(in->sdi, inc->channelcount++, SR_CHANNEL_LOGIC, TRUE, vcd_ch->name);
 				inc->channels = g_slist_append(inc->channels, vcd_ch);
@@ -410,7 +441,8 @@ static void process_bit(struct context *inc, char *identifier, unsigned int bit)
 
 	for (j = 0, l = inc->channels; j < inc->channelcount && l; j++, l = l->next) {
 		vcd_ch = l->data;
-		if (g_strcmp0(identifier, vcd_ch->identifier) == 0) {
+		if (vcd_ch->identifier != NULL &&
+		    g_strcmp0(identifier, vcd_ch->identifier) == 0) {
 			/* Found our channel. */
 			size_t byte_idx = (j / 8);
 			size_t bit_idx = j - 8 * byte_idx;
@@ -418,6 +450,63 @@ static void process_bit(struct context *inc, char *identifier, unsigned int bit)
 				inc->current_levels[byte_idx] |= (uint8_t)1 << bit_idx;
 			else
 				inc->current_levels[byte_idx] &= ~((uint8_t)1 << bit_idx);
+			if (l->next != NULL) {
+				vcd_ch = l->next->data;
+				if (vcd_ch && vcd_ch->identifier == NULL)
+					sr_warn("Identifier %s should be used with multiple bits.",
+						identifier);
+			}
+			break;
+		}
+	}
+	if (j == inc->channelcount)
+		sr_dbg("Did not find channel for identifier '%s'.", identifier);
+}
+
+/* Set the channel levels depending on the identifier and unparsed values. */
+static void process_multibit(struct context *inc, char *identifier, const char *token)
+{
+	GSList *l;
+	struct vcd_channel *vcd_ch;
+	unsigned int j;
+
+	for (j = 0, l = inc->channels; j < inc->channelcount && l; j++, l = l->next) {
+		vcd_ch = l->data;
+		if (vcd_ch->identifier != NULL &&
+		    g_strcmp0(identifier, vcd_ch->identifier) == 0) {
+			/* Found our channel. */
+			size_t byte_idx = (j / 8);
+			size_t bit_idx = j - 8 * byte_idx;
+			size_t numtoken = strlen(token);
+			unsigned int firstj = j;
+			for (; j < inc->channelcount && l; j++, l = l->next) {
+				vcd_ch = l->data;
+				if (j != firstj && vcd_ch->identifier != NULL)
+					break;
+			}
+			j -= firstj;
+			if (numtoken > j) {
+				sr_warn("Too many bits in vector data.");
+				token += numtoken - j;
+				numtoken = j;
+			}
+			do {
+				unsigned int bit;
+				if (numtoken < j) {
+					bit = 0;
+				} else {
+					bit = *token++ == '1';
+					--numtoken;
+				}
+				if (bit)
+					inc->current_levels[byte_idx] |= (uint8_t)1 << bit_idx;
+				else
+					inc->current_levels[byte_idx] &= ~((uint8_t)1 << bit_idx);
+				if (++bit_idx >= 8) {
+					bit_idx = 0;
+					byte_idx ++;
+				}
+			} while(--j > 0);
 			break;
 		}
 	}
@@ -505,19 +594,16 @@ static void parse_contents(const struct sr_input *in, char *data)
 				/* Process next token */
 				continue;
 		} else if (strchr("bB", tokens[i][0]) != NULL) {
-			bit = (tokens[i][1] == '1');
-
 			/*
 			 * Bail out if a) char after 'b' is NUL, or b) there is
-			 * a second character after 'b', or c) there is no
-			 * identifier.
+			 * no identifier.
 			 */
-			if (!tokens[i][1] || tokens[i][2] || !tokens[++i]) {
+			if (!tokens[i][1] || !tokens[++i]) {
 				sr_dbg("Unexpected vector format!");
 				break;
 			}
 
-			process_bit(inc, tokens[i], bit);
+			process_multibit(inc, tokens[i], tokens[i-1] + 1);
 		} else if (strchr("01xXzZ", tokens[i][0]) != NULL) {
 			char *identifier;
 
