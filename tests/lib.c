@@ -14,16 +14,35 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <config.h>
 #include <stdio.h>
 #include <string.h>
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <check.h>
-#include "../libsigrok.h"
+#include <libsigrok/libsigrok.h>
+#include "lib.h"
+
+struct sr_context *srtest_ctx;
+
+void srtest_setup(void)
+{
+	int ret;
+
+	ret = sr_init(&srtest_ctx);
+	fail_unless(ret == SR_OK, "sr_init() failed: %d.", ret);
+}
+
+void srtest_teardown(void)
+{
+	int ret;
+
+	ret = sr_exit(srtest_ctx);
+	fail_unless(ret == SR_OK, "sr_exit() failed: %d.", ret);
+}
 
 /* Get a libsigrok driver by name. */
 struct sr_dev_driver *srtest_driver_get(const char *drivername)
@@ -31,7 +50,7 @@ struct sr_dev_driver *srtest_driver_get(const char *drivername)
 	struct sr_dev_driver **drivers, *driver = NULL;
 	int i;
 
-	drivers = sr_driver_list();
+	drivers = sr_driver_list(srtest_ctx);
 	fail_unless(drivers != NULL, "No drivers found.");
 
 	for (i = 0; drivers[i]; i++) {
@@ -42,44 +61,6 @@ struct sr_dev_driver *srtest_driver_get(const char *drivername)
 	fail_unless(driver != NULL, "Driver '%s' not found.", drivername);
 
 	return driver;
-}
-
-/* Get a libsigrok input format by ID. */
-struct sr_input_format *srtest_input_get(const char *id)
-{
-	struct sr_input_format **inputs, *input = NULL;
-	int i;
-
-	inputs = sr_input_list();
-	fail_unless(inputs != NULL, "No input modules found.");
-
-	for (i = 0; inputs[i]; i++) {
-		if (strcmp(inputs[i]->id, id))
-			continue;
-		input = inputs[i];
-	}
-	fail_unless(input != NULL, "Input module '%s' not found.", id);
-
-	return input;
-}
-
-/* Get a libsigrok output format by ID. */
-struct sr_output_format *srtest_output_get(const char *id)
-{
-	struct sr_output_format **outputs, *output = NULL;
-	int i;
-
-	outputs = sr_output_list();
-	fail_unless(outputs != NULL, "No output modules found.");
-
-	for (i = 0; outputs[i]; i++) {
-		if (strcmp(outputs[i]->id, id))
-			continue;
-		output = outputs[i];
-	}
-	fail_unless(output != NULL, "Output module '%s' not found.", id);
-
-	return output;
 }
 
 /* Initialize a libsigrok driver. */
@@ -98,7 +79,7 @@ void srtest_driver_init_all(struct sr_context *sr_ctx)
 	struct sr_dev_driver **drivers, *driver;
 	int i, ret;
 
-	drivers = sr_driver_list();
+	drivers = sr_driver_list(srtest_ctx);
 	fail_unless(drivers != NULL, "No drivers found.");
 
 	for (i = 0; drivers[i]; i++) {
@@ -109,40 +90,6 @@ void srtest_driver_init_all(struct sr_context *sr_ctx)
 	}
 }
 
-/* Initialize a libsigrok input module. */
-void srtest_input_init(struct sr_context *sr_ctx, struct sr_input_format *input)
-{
-	int ret;
-	struct sr_input *in;
-
-	(void)sr_ctx;
-
-	in = g_try_malloc0(sizeof(struct sr_input));
-	fail_unless(in != NULL);
-
-	in->format = input;
-	in->param = NULL;
-
-	ret = in->format->init(in, "nonexisting.dat");
-	fail_unless(ret == SR_OK, "Failed to init '%s' input module: %d.",
-		    input->id, ret);
-
-	g_free(in);
-}
-
-/* Initialize all libsigrok input modules. */
-void srtest_input_init_all(struct sr_context *sr_ctx)
-{
-	struct sr_input_format **inputs;
-	int i;
-
-	inputs = sr_input_list();
-	fail_unless(inputs != NULL, "No input modules found.");
-
-	for (i = 0; inputs[i]; i++)
-		srtest_input_init(sr_ctx, inputs[i]);
-}
-
 /* Set the samplerate for the respective driver to the specified value. */
 void srtest_set_samplerate(struct sr_dev_driver *driver, uint64_t samplerate)
 {
@@ -150,7 +97,7 @@ void srtest_set_samplerate(struct sr_dev_driver *driver, uint64_t samplerate)
 	struct sr_dev_inst *sdi;
 	GVariant *gvar;
 
-	sdi = g_slist_nth_data(driver->priv, 0);
+	sdi = g_slist_nth_data(driver->context, 0);
 
 	gvar = g_variant_new_uint64(samplerate);
 	ret = driver->config_set(SR_CONF_SAMPLERATE, gvar, sdi, NULL);
@@ -168,7 +115,7 @@ uint64_t srtest_get_samplerate(struct sr_dev_driver *driver)
 	struct sr_dev_inst *sdi;
 	GVariant *gvar;
 
-	sdi = g_slist_nth_data(driver->priv, 0);
+	sdi = g_slist_nth_data(driver->context, 0);
 
 	ret = driver->config_get(SR_CONF_SAMPLERATE, &gvar, sdi, NULL);
 	samplerate = g_variant_get_uint64(gvar);
@@ -195,36 +142,21 @@ void srtest_check_samplerate(struct sr_context *sr_ctx, const char *drivername,
 		    drivername, s);
 }
 
-void srtest_buf_to_file(const char *filename, const uint8_t *buf, uint64_t len)
+GArray *srtest_get_enabled_logic_channels(const struct sr_dev_inst *sdi)
 {
-	FILE *f;
-	GError *error = NULL;
-	gboolean ret;
-
-	f = g_fopen(filename, "wb");
-	fail_unless(f != NULL);
-
-	ret = g_file_set_contents(filename, (const gchar *)buf, len, &error);
-	fail_unless(ret == TRUE);
-
-	fclose(f);
-}
-
-GArray *srtest_get_enabled_logic_probes(const struct sr_dev_inst *sdi)
-{
-	struct sr_probe *probe;
-	GArray *probes;
+	struct sr_channel *ch;
+	GArray *channels;
 	GSList *l;
 
-	probes = g_array_new(FALSE, FALSE, sizeof(int));
-	for (l = sdi->probes; l; l = l->next) {
-		probe = l->data;
-		if (probe->type != SR_PROBE_LOGIC)
+	channels = g_array_new(FALSE, FALSE, sizeof(int));
+	for (l = sr_dev_inst_channels_get(sdi); l; l = l->next) {
+		ch = l->data;
+		if (ch->type != SR_CHANNEL_LOGIC)
 			continue;
-		if (probe->enabled != TRUE)
+		if (ch->enabled != TRUE)
 			continue;
-		g_array_append_val(probes, probe->index);
+		g_array_append_val(channels, ch->index);
 	}
 
-	return probes;
+	return channels;
 }

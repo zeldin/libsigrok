@@ -5,8 +5,9 @@ HACKING
 Coding style
 ------------
 
-This project is programmed using the Linux kernel coding style, see
-http://lxr.linux.no/linux/Documentation/CodingStyle for details.
+This project is programmed using the Linux kernel coding style:
+
+  https://www.kernel.org/doc/html/latest/process/coding-style.html
 
 Please use the same style for any code contributions, thanks!
 
@@ -14,14 +15,15 @@ Please use the same style for any code contributions, thanks!
 Contributions
 -------------
 
- - Patches should be sent to the development mailinglist at
+ - In order to contribute you should ideally clone the git repository and
+   let us know (preferably via IRC, or via the mailing list) from where to
+   pull/review your changes. You can use github.com, or any other public git
+   hosting site.
+
+ - Alternatively, patches can be sent to the development mailinglist at
    sigrok-devel@lists.sourceforge.net (please subscribe to the list first).
 
    https://lists.sourceforge.net/lists/listinfo/sigrok-devel
-
- - Alternatively, you can also clone the git repository and let us know
-   from where to pull/review your changes. You can use gitorious.org,
-   github.com, or any other public git hosting site.
 
 
 Adding a new hardware driver
@@ -45,7 +47,7 @@ You can apply it like this:
  $ cd libsigrok
  $ git am 0001-tondaj-sl-814-Initial-driver-skeleton.patch
 
-You can now edit the files in the hardware/tondaj-sl-814 directory as needed
+You can now edit the files in src/hardware/tondaj-sl-814 as needed
 and implement your driver based on the skeleton files there. That means your
 patch submission later will consist of at least two patches: the initial one
 adding the skeleton driver, and one or more additional patches that actually
@@ -59,15 +61,11 @@ This is a rough overview of what you need to do in order to add a new driver
 (using the Tondaj SL-814 device as example). It's basically what the
 'new-driver' script (see above) does for you:
 
- - configure.ac:
-   - Add an --enable-tondaj-sl-814 option.
-   - Add "hardware/tondaj-sl-814/Makefile" to the AC_CONFIG_FILES list.
-   - Add and entry for the device in the "Enabled hardware drivers" list
-     at the bottom of the file.
- - hardware/Makefile.am: Add "tondaj-sl-814" to the SUBDIRS variable.
- - hwdriver.c: Add a tondaj_sl_814_driver_info entry in two places.
- - hardware/tondaj-sl-814/ directory: Add the following files:
-   Makefile.am, api.c, protocol.c, protocol.h
+ - Makefile.am: Add to src_libdrivers_la_SOURCES under the HW_TONDAJ_SL_814
+   condition.
+ - configure.ac: Add an SR_DRIVER() call.
+ - src/drivers.c: Add a tondaj_sl_814_driver_info entry in two places.
+ - src/hardware/tondaj-sl-814/ directory: Add api.c, protocol.c, protocol.h.
 
 See existing drivers or the 'new-driver' output for the details.
 
@@ -81,18 +79,21 @@ Random notes
  - Generally avoid assigning values to variables at declaration time,
    especially so for complex and/or run-time dependent values.
 
- - Consistently use g_try_malloc() / g_try_malloc0(). Do not use standard
+ - Consistently use g_*malloc() / g_*malloc0(). Do not use standard
    malloc()/calloc() if it can be avoided (sometimes other libs such
    as libftdi can return malloc()'d memory, for example).
 
  - Always properly match allocations with the proper *free() functions. If
-   glib's g_try_malloc()/g_try_malloc0() was used, use g_free() to free the
+   glib's g_*malloc()/g_*malloc0() was used, use g_free() to free the
    memory. Otherwise use standard free(). Never use the wrong function!
 
- - Never use g_malloc() or g_malloc0(). These functions do not return NULL
-   if not enough memory is available but rather lead to an exit() or segfault
-   instead. This behaviour is not acceptable for libraries.
-   Use g_try_malloc()/g_try_malloc0() instead and check the return value.
+ - We assume that "small" memory allocations (< 1MB) will always succeed.
+   Thus, it's fine to use g_malloc() or g_malloc0() for allocations of
+   simple/small structs and such (instead of using g_try_malloc()), and
+   there's no need to check the return value.
+
+   Do use g_try_malloc() or g_try_malloc0() for large (>= 1MB) allocations
+   and check the return value.
 
  - You should never print any messages (neither to stdout nor stderr nor
    elsewhere) "manually" via e.g. printf() or g_log() or similar functions.
@@ -105,7 +106,7 @@ Random notes
  - Consistently use the same naming convention for #include guards in headers:
    <PROJECTNAME>_<PATH_TO_FILE>_<FILE>
    This ensures that all #include guards are always unique and consistent.
-   Examples: LIBSIGROK_LIBSIGROK_H, LIBSIGROK_HARDWARE_MIC_985XX_PROTOCOL_H
+   Example: LIBSIGROK_HARDWARE_MIC_985XX_PROTOCOL_H
 
  - Consistently use the same naming convention for API functions:
    <libprefix>_<groupname>_<action>().
@@ -141,13 +142,31 @@ Random notes
 Doxygen
 -------
 
+ - Use the @ notation for all Doxygen comments (e.g. @param, not \param).
+
+ - Do not use the @brief tag, it's unnecessary as we use JAVADOC_AUTOBRIEF.
+
+ - Generally use the following item order in Doxygen comments:
+    - Brief function description (1 line), followed by an empty line.
+    - Optionally, a longer function description (and another empty line).
+    - The list of parameter descriptions (@param).
+    - The return value description (@return or @retval).
+    - An optional @since tag (only for public SR_API functions).
+    - An optional @private tag (for private SR_PRIV functions).
+
+ - In @param lines, the name of the parameter is followed by a space and
+   then a sentence describing the parameter (starts with a capital letter,
+   ends with a full stop).
+
  - In Doxygen comments, put an empty line between the block of @param lines
    and the final @return line. The @param lines themselves (if there is more
    than one) are not separated by empty lines.
 
  - Mark private functions (SR_PRIV) with /** @private */, so that Doxygen
    doesn't include them in the output. Functions that are "static" anyway
-   don't need to be marked like this.
+   don't need to be marked like this. Functions in non-public files that
+   are explicitly excluded in Doxyfile don't need to be marked either.
+   Don't use @internal, always use @private instead.
 
  - Mark private variables/#defines with /** @cond PRIVATE */ and
    /** @endcond */, so that Doxygen doesn't include them in the output.
@@ -167,6 +186,58 @@ Doxygen
 
    The @since tag should be the last one, i.e. it should come after @param,
    @return, @see, and so on.
+
+ - Examples:
+
+/**
+ * Tell a hardware driver to scan for devices.
+ *
+ * In addition to the detection, the devices that are found are also
+ * initialized automatically. On some devices, this involves a firmware upload,
+ * or other such measures.
+ *
+ * The order in which the system is scanned for devices is not specified. The
+ * caller should not assume or rely on any specific order.
+ *
+ * Before calling sr_driver_scan(), the user must have previously initialized
+ * the driver by calling sr_driver_init().
+ *
+ * @param[in] driver The driver that should scan. Must be a pointer to one of
+ *                   the entries returned by sr_driver_list(). Must not be NULL.
+ * @param[in] options List of 'struct sr_hwopt' options to pass to the driver's
+ *                    scanner. Can be NULL/empty.
+ *
+ * @return A GSList * of 'struct sr_dev_inst', or NULL if no devices were
+ *         found (or errors were encountered). This list must be freed by the
+ *         caller using g_slist_free(), but without freeing the data pointed
+ *         to in the list.
+ *
+ * @since 0.2.0
+ */
+
+/**
+ * Query value of a configuration key at the given driver or device instance.
+ *
+ * @param[in] driver The sr_dev_driver struct to query. Must not be NULL.
+ * @param[in] sdi (optional) If the key is specific to a device, this must
+ *            contain a pointer to the struct sr_dev_inst to be checked.
+ *            Otherwise it must be NULL. If sdi is != NULL, sdi->priv must
+ *            also be != NULL.
+ * @param[in,out] data Pointer to a GVariant where the value will be stored.
+ *             Must not be NULL. The caller is given ownership of the GVariant
+ *             and must thus decrease the refcount after use. However if
+ *             this function returns an error code, the field should be
+ *             considered unused, and should not be unreferenced.
+ *
+ * @retval SR_OK Success.
+ * @retval SR_ERR Error.
+ * @retval SR_ERR_ARG The driver doesn't know that key, but this is not to be
+ *         interpreted as an error by the caller; merely as an indication
+ *         that it's not applicable.
+ *
+ * @since 0.3.0
+ * @private
+ */
 
 
 Testsuite

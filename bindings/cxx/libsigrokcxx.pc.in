@@ -1,0 +1,13 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libsigrokcxx
+Description: C++ bindings for libsigrok
+URL: http://www.sigrok.org
+Requires: libsigrok glibmm-2.4
+Version: @SR_PACKAGE_VERSION@
+Libs: -L${libdir} -lsigrokcxx
+Libs.private: -lm
+Cflags: -I${includedir}

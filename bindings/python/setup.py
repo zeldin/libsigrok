@@ -18,27 +18,83 @@
 ##
 
 from setuptools import setup, find_packages, Extension
-import subprocess
+from distutils.command.build_py import build_py as _build_py
+from distutils.command.build_ext import build_ext as _build_ext
+import numpy as np
+import os
+import sys
+import re
+import shlex
 
-sr_includes, sr_lib_dirs, sr_libs, (sr_version,) = [
-    subprocess.check_output(
-        ["pkg-config", option, "libsigrok"]).decode().rstrip().split(' ')
-    for option in
-        ("--cflags-only-I", "--libs-only-L", "--libs-only-l", "--modversion")]
+srcdir = os.path.dirname(os.path.abspath(__file__))
+os.chdir('bindings/python')
+srcdir = os.path.relpath(srcdir)
+srcdir_parent = os.path.normpath(os.path.join(srcdir, '..'))
+
+# Override the default compile flags used by distutils.
+os.environ['OPT'] = ''
+
+# Parse the command line arguments for VAR=value assignments,
+# and apply them as environment variables.
+while len(sys.argv) > 1:
+    match = re.match(r'([A-Z]+)=(.*)', sys.argv[1])
+    if match is None:
+        break
+    os.environ[match.group(1)] = match.group(2)
+    del sys.argv[1]
+
+includes = ['../../include', '../cxx/include']
+includes += [os.path.normpath(os.path.join(srcdir, path)) for path in includes]
+includes += ['../..', np.get_include()]
+
+ldadd = shlex.split(os.environ.get('LDADD', ''))
+libdirs = ['../../.libs', '../cxx/.libs'] + \
+    [l[2:] for l in ldadd if l.startswith('-L')]
+libs = [l[2:] for l in ldadd if l.startswith('-l')] + ['sigrokcxx']
+
+def vpath(file):
+    vfile = os.path.join(srcdir, file)
+    return vfile if os.path.exists(vfile) else file
+
+def unvpath(file):
+    return os.path.relpath(file, srcdir) if file.startswith(srcdir) else file
+
+class build_py(_build_py):
+    def find_package_modules(self, package, pkg_dir):
+        mods = _build_py.find_package_modules(self, package, pkg_dir)
+        vmods = _build_py.find_package_modules(self, package, vpath(pkg_dir))
+        mods.extend([mod for mod in vmods if mod not in mods])
+        return mods
+    def check_package(self, package, package_dir):
+        return _build_py.check_package(self, package, vpath(package_dir))
+
+class build_ext(_build_ext):
+    def finalize_options(self):
+        _build_ext.finalize_options(self)
+        self.swig_opts = ['-c++', '-threads', '-Isigrok/core', '-I..',
+            '-I' + srcdir_parent] + ['-I%s' % i for i in includes] + self.swig_opts
+    def spawn (self, cmd):
+        cmd[1:-1] = [arg if arg.startswith('-') else unvpath(arg) for arg in
+                     cmd[1:-1]]
+        _build_ext.spawn(self, cmd)
+    def swig_sources (self, sources, extension):
+        return [unvpath(src) for src in
+                _build_ext.swig_sources(self, sources, extension)]
 
 setup(
     name = 'libsigrok',
     namespace_packages = ['sigrok'],
-    packages = find_packages(),
-    version = sr_version,
+    packages = find_packages(srcdir),
+    version = os.environ.get('VERSION'),
     description = "libsigrok API wrapper",
+    zip_safe = False,
     ext_modules = [
-        Extension('sigrok.core._lowlevel',
-            sources = ['sigrok/core/lowlevel.i'],
-            swig_opts = ['-threads'] + sr_includes,
-            include_dirs = [i[2:] for i in sr_includes],
-            library_dirs = [l[2:] for l in sr_lib_dirs],
-            libraries = [l[2:] for l in sr_libs]
-        )
+        Extension('sigrok.core._classes',
+            sources = [vpath('sigrok/core/classes.i')],
+            extra_compile_args = ['-Wno-uninitialized'],
+            include_dirs = includes,
+            library_dirs = libdirs,
+            libraries = libs)
     ],
+    cmdclass = {'build_py': build_py, 'build_ext': build_ext},
 )
